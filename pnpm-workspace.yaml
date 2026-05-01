@@ -1,0 +1,24 @@
+packages:
+  - packages/*
+
+ignoredBuiltDependencies:
+  - '@mongodb-js/zstd'
+  - '@parcel/watcher'
+  - '@prisma/engines'
+  - '@sap/hana-client'
+  - aws-crt
+  - bcrypt
+  - better-sqlite3
+  - canvas
+  - esbuild
+  - kerberos
+  - libpq
+  - mongodb-client-encryption
+  - msgpackr-extract
+  - oracledb
+  - prisma
+  - sqlite3
+  - unrs-resolver
+
+onlyBuiltDependencies:
+  - bcrypt
