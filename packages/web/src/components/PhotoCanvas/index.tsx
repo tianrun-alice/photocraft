@@ -75,6 +75,9 @@ export function PhotoCanvas() {
     )
   }
 
+  const p = photo
+  const d = dims
+
   function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
     const el = e.currentTarget
     imgNaturalRef.current = { w: el.naturalWidth, h: el.naturalHeight }
@@ -82,8 +85,8 @@ export function PhotoCanvas() {
     if (initialFilledRef.current) return
 
     const imgRatio = el.naturalWidth / el.naturalHeight
-    const templateRatio = dims.previewWidth / dims.previewHeight
-    const initialScale = imgRatio > templateRatio ? dims.previewHeight / el.naturalHeight : dims.previewWidth / el.naturalWidth
+    const templateRatio = d.previewWidth / d.previewHeight
+    const initialScale = imgRatio > templateRatio ? d.previewHeight / el.naturalHeight : d.previewWidth / el.naturalWidth
     setImageScale(initialScale)
     setBaseScale(initialScale)
     setZoomInput('100')
@@ -110,7 +113,7 @@ export function PhotoCanvas() {
     containerRef.current.setPointerCapture(e.pointerId)
     lastPointRef.current = { x: e.clientX, y: e.clientY }
     if (kind === 'image') {
-      imageDragOriginRef.current = { imgX: photo.imageX, imgY: photo.imageY, clientX: e.clientX, clientY: e.clientY }
+      imageDragOriginRef.current = { imgX: p.imageX, imgY: p.imageY, clientX: e.clientX, clientY: e.clientY }
       pendingImagePosRef.current = null
       if (imagePositionRafRef.current != null) {
         cancelAnimationFrame(imagePositionRafRef.current)
@@ -160,9 +163,9 @@ export function PhotoCanvas() {
     }
 
     if (dragMode.kind === 'ann') {
-      const dMmX = pxToMm(dx / dims.scale, PREVIEW_DPI)
-      const dMmY = pxToMm(dy / dims.scale, PREVIEW_DPI)
-      const ann = photo.annotations.find((a) => a.id === dragMode.id)
+      const dMmX = pxToMm(dx / d.scale, PREVIEW_DPI)
+      const dMmY = pxToMm(dy / d.scale, PREVIEW_DPI)
+      const ann = p.annotations.find((a) => a.id === dragMode.id)
       if (!ann) return
       updateAnnotation(dragMode.id, { x: ann.x + dMmX, y: ann.y + dMmY })
     }
@@ -186,32 +189,32 @@ export function PhotoCanvas() {
   function onWheel(e: WheelEvent) {
     e.preventDefault()
     const delta = e.deltaY > 0 ? -0.05 : 0.05
-    setImageScale(photo.imageScale + delta)
+    setImageScale(p.imageScale + delta)
   }
 
-  const zoomPercent = Math.max(0, (photo.imageScale / (baseScale || 1)) * 100)
+  const zoomPercent = Math.max(0, (p.imageScale / (baseScale || 1)) * 100)
   const applyZoomPercent = (pct: number) => {
     const next = (baseScale || 1) * (pct / 100)
     setImageScale(next)
   }
 
-  const imgTransform = `translate(${photo.imageX}px, ${photo.imageY}px) scale(${photo.imageScale}) rotate(${photo.imageRotation}deg) scaleX(${
-    photo.imageFlipX ? -1 : 1
-  }) scaleY(${photo.imageFlipY ? -1 : 1})`
+  const imgTransform = `translate(${p.imageX}px, ${p.imageY}px) scale(${p.imageScale}) rotate(${p.imageRotation}deg) scaleX(${
+    p.imageFlipX ? -1 : 1
+  }) scaleY(${p.imageFlipY ? -1 : 1})`
 
-  const borderToPx = (mm: number) => Math.round(mmToPx(mm, PREVIEW_DPI) * dims.scale)
-  const bt = photo.border.enabled.top ? borderToPx(photo.border.top) : 0
-  const bb = photo.border.enabled.bottom ? borderToPx(photo.border.bottom) : 0
-  const bl = photo.border.enabled.left ? borderToPx(photo.border.left) : 0
-  const br = photo.border.enabled.right ? borderToPx(photo.border.right) : 0
+  const borderToPx = (mm: number) => Math.round(mmToPx(mm, PREVIEW_DPI) * d.scale)
+  const bt = p.border.enabled.top ? borderToPx(p.border.top) : 0
+  const bb = p.border.enabled.bottom ? borderToPx(p.border.bottom) : 0
+  const bl = p.border.enabled.left ? borderToPx(p.border.left) : 0
+  const br = p.border.enabled.right ? borderToPx(p.border.right) : 0
   /** 与上下边框同向的可排版宽度（内白区域），批注换行宽度与此对齐 */
-  const annotationMaxWidthPx = Math.max(32, dims.previewWidth - bl - br)
+  const annotationMaxWidthPx = Math.max(32, d.previewWidth - bl - br)
 
   return (
     <div className="pc-panel p-3 select-none">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm text-emerald-900">
-          模板：{photo.template.name} · {photo.templateRotation}°
+          模板：{p.template.name} · {p.templateRotation}°
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -227,7 +230,7 @@ export function PhotoCanvas() {
       <div
         ref={containerRef}
         className="relative mx-auto touch-none cursor-grab active:cursor-grabbing"
-        style={{ width: dims.containerW, height: dims.containerH }}
+        style={{ width: d.containerW, height: d.containerH }}
         onPointerDown={(e) => {
           if (e.button === 0) e.preventDefault()
           onPointerDown(e)
@@ -239,7 +242,7 @@ export function PhotoCanvas() {
       >
         {showOutside && (
           <img
-            src={photo.dataUrl}
+            src={p.dataUrl}
             alt=""
             draggable={false}
             onDragStart={(ev) => ev.preventDefault()}
@@ -259,13 +262,13 @@ export function PhotoCanvas() {
           data-export-target="template-box"
           className="absolute left-1/2 top-1/2 bg-white overflow-hidden"
           style={{
-            width: dims.previewWidth,
-            height: dims.previewHeight,
+            width: d.previewWidth,
+            height: d.previewHeight,
             transform: 'translate(-50%, -50%)',
           }}
         >
           <img
-            src={photo.dataUrl}
+            src={p.dataUrl}
             alt=""
             draggable={false}
             onDragStart={(ev) => ev.preventDefault()}
@@ -281,29 +284,29 @@ export function PhotoCanvas() {
             }}
           />
 
-          {bt > 0 && <div className="absolute left-0 top-0 w-full" style={{ height: bt, background: photo.borderColor }} />}
+          {bt > 0 && <div className="absolute left-0 top-0 w-full" style={{ height: bt, background: p.borderColor }} />}
           {bb > 0 && (
-            <div className="absolute left-0 bottom-0 w-full" style={{ height: bb, background: photo.borderColor }} />
+            <div className="absolute left-0 bottom-0 w-full" style={{ height: bb, background: p.borderColor }} />
           )}
-          {bl > 0 && <div className="absolute left-0 top-0 h-full" style={{ width: bl, background: photo.borderColor }} />}
+          {bl > 0 && <div className="absolute left-0 top-0 h-full" style={{ width: bl, background: p.borderColor }} />}
           {br > 0 && (
-            <div className="absolute right-0 top-0 h-full" style={{ width: br, background: photo.borderColor }} />
+            <div className="absolute right-0 top-0 h-full" style={{ width: br, background: p.borderColor }} />
           )}
         </div>
 
         <div
           className="absolute left-1/2 top-1/2 border-2 border-emerald-800/70 pointer-events-none rounded-[1px]"
           style={{
-            width: dims.previewWidth,
-            height: dims.previewHeight,
+            width: d.previewWidth,
+            height: d.previewHeight,
             transform: 'translate(-50%, -50%)',
           }}
         />
 
-        {photo.annotations.map((ann) => {
-          const x = PADDING + Math.round(mmToPx(ann.x, PREVIEW_DPI) * dims.scale)
-          const y = PADDING + Math.round(mmToPx(ann.y, PREVIEW_DPI) * dims.scale)
-          const fontSizePx = Math.max(10, Math.round(mmToPx(ann.fontSize, PREVIEW_DPI) * dims.scale))
+        {p.annotations.map((ann) => {
+          const x = PADDING + Math.round(mmToPx(ann.x, PREVIEW_DPI) * d.scale)
+          const y = PADDING + Math.round(mmToPx(ann.y, PREVIEW_DPI) * d.scale)
+          const fontSizePx = Math.max(10, Math.round(mmToPx(ann.fontSize, PREVIEW_DPI) * d.scale))
           const fontWeight = ann.bold ? 700 : 400
 
           return (

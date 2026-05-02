@@ -93,7 +93,7 @@ export interface EditorState {
   saveCurrentAsPreset: (name: string) => void
   removePreset: (id: string) => void
 
-  setBorder: (partial: Partial<BorderConfig> & { enabled?: Partial<BorderConfig['enabled']> }) => void
+  setBorder: (partial: Omit<Partial<BorderConfig>, 'enabled'> & { enabled?: Partial<BorderConfig['enabled']> }) => void
   setBorderColor: (color: string) => void
 
   addAnnotation: (text?: string) => void
