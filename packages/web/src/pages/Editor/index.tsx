@@ -18,13 +18,19 @@ export function Editor() {
 
       <main className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-4 p-4 lg:p-6">
         <aside className="w-full lg:w-56 flex-shrink-0">
-          <div className="pc-panel p-3.5 space-y-4">
-            <PresetPanel />
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/90 mb-2">图片列表</h2>
-              <ImageUploader />
+          <div className="pc-panel flex max-h-[calc(100vh-7rem)] min-h-0 flex-col gap-4 overflow-hidden p-3.5 lg:max-h-[calc(100vh-5.5rem)]">
+            <div className="shrink-0">
+              <PresetPanel />
             </div>
-            <BatchExportButton />
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+              <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-emerald-700/90">图片列表</h2>
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
+                <ImageUploader />
+              </div>
+            </div>
+            <div className="shrink-0">
+              <BatchExportButton />
+            </div>
           </div>
         </aside>
 

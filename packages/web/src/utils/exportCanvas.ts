@@ -21,7 +21,7 @@ async function renderPhotoToDataUrl(
   format: 'jpeg' | 'png',
   quality: number,
 ): Promise<string> {
-  const { width: previewWidth, height: previewHeight } = getPreviewDimensions(
+  const { width: previewWidth } = getPreviewDimensions(
     photo.template,
     photo.templateRotation,
     MAX_SIZE,

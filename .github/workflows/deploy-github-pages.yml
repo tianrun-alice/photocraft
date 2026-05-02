@@ -35,6 +35,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build web
+        env:
+          # 显式传入，避免个别环境下子进程未继承导致 base 变成 '/'，资源从根路径加载而 404
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: pnpm --filter web build
 
       - uses: actions/upload-pages-artifact@v3
