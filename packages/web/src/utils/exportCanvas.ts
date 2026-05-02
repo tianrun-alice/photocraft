@@ -2,12 +2,11 @@ import type { PhotoItem } from '@photocraft/shared'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { fabric } from 'fabric'
-import { getPreviewDimensions, mmToPx } from '@/utils/unitConvert'
+import { getExportDimensions, getPreviewDimensions, mmToPx } from '@/utils/unitConvert'
 
 const PREVIEW_DPI = 96
 const MAX_SIZE = 450
 const EXPORT_DPI = 300
-const multiplier = EXPORT_DPI / PREVIEW_DPI
 
 function pad3(n: number) {
   return n.toString().padStart(3, '0')
@@ -28,10 +27,17 @@ async function renderPhotoToDataUrl(
     MAX_SIZE,
     PREVIEW_DPI,
   )
+  const { width: exportWidth, height: exportHeight } = getExportDimensions(
+    photo.template,
+    photo.templateRotation,
+    EXPORT_DPI,
+  )
+  /** 与编辑器预览同一套 mm→像素比例；在此比例下直接铺 300DPI 画布，避免小画布×multiplier 放大发糊 */
+  const pxRatio = exportWidth / previewWidth
 
   const el = document.createElement('canvas')
-  el.width = previewWidth
-  el.height = previewHeight
+  el.width = exportWidth
+  el.height = exportHeight
 
   const fCanvas = new fabric.Canvas(el, { backgroundColor: '#ffffff' })
 
@@ -41,10 +47,10 @@ async function renderPhotoToDataUrl(
       (img: any) => {
         try {
           img.set({
-            scaleX: photo.imageScale,
-            scaleY: photo.imageScale,
-            left: previewWidth / 2 + photo.imageX,
-            top: previewHeight / 2 + photo.imageY,
+            scaleX: photo.imageScale * pxRatio,
+            scaleY: photo.imageScale * pxRatio,
+            left: exportWidth / 2 + photo.imageX * pxRatio,
+            top: exportHeight / 2 + photo.imageY * pxRatio,
             originX: 'center',
             originY: 'center',
             angle: photo.imageRotation,
@@ -54,21 +60,8 @@ async function renderPhotoToDataUrl(
 
           fCanvas.add(img)
 
-          // borders
-          const wMm =
-            photo.templateRotation === 90 || photo.templateRotation === 270
-              ? photo.template.mm.height
-              : photo.template.mm.width
-          const hMm =
-            photo.templateRotation === 90 || photo.templateRotation === 270
-              ? photo.template.mm.width
-              : photo.template.mm.height
-
-          const wPxRaw = mmToPx(wMm, PREVIEW_DPI)
-          const hPxRaw = mmToPx(hMm, PREVIEW_DPI)
-          const scale = Math.min(MAX_SIZE / Math.max(wPxRaw, hPxRaw), 1)
-
-          const borderToPx = (mm: number) => Math.round(mmToPx(mm, PREVIEW_DPI) * scale)
+          // borders（毫米 → 导出画布像素，与预览中 mm→预览像素 线性一致）
+          const borderToPx = (mm: number) => Math.round(mmToPx(mm, EXPORT_DPI))
 
           const bt = photo.border.enabled.top ? borderToPx(photo.border.top) : 0
           const bb = photo.border.enabled.bottom ? borderToPx(photo.border.bottom) : 0
@@ -80,7 +73,7 @@ async function renderPhotoToDataUrl(
               new fabric.Rect({
                 left: 0,
                 top: 0,
-                width: previewWidth,
+                width: exportWidth,
                 height: bt,
                 fill: photo.borderColor,
                 selectable: false,
@@ -91,8 +84,8 @@ async function renderPhotoToDataUrl(
             fCanvas.add(
               new fabric.Rect({
                 left: 0,
-                top: previewHeight - bb,
-                width: previewWidth,
+                top: exportHeight - bb,
+                width: exportWidth,
                 height: bb,
                 fill: photo.borderColor,
                 selectable: false,
@@ -105,7 +98,7 @@ async function renderPhotoToDataUrl(
                 left: 0,
                 top: 0,
                 width: bl,
-                height: previewHeight,
+                height: exportHeight,
                 fill: photo.borderColor,
                 selectable: false,
                 evented: false,
@@ -114,10 +107,10 @@ async function renderPhotoToDataUrl(
           if (br > 0)
             fCanvas.add(
               new fabric.Rect({
-                left: previewWidth - br,
+                left: exportWidth - br,
                 top: 0,
                 width: br,
-                height: previewHeight,
+                height: exportHeight,
                 fill: photo.borderColor,
                 selectable: false,
                 evented: false,
@@ -126,9 +119,9 @@ async function renderPhotoToDataUrl(
 
           // annotations
           for (const ann of photo.annotations) {
-            const annXPx = Math.round(mmToPx(ann.x, PREVIEW_DPI) * scale)
-            const annYPx = Math.round(mmToPx(ann.y, PREVIEW_DPI) * scale)
-            const fontSize = Math.max(1, Math.round(mmToPx(ann.fontSize, PREVIEW_DPI) * scale))
+            const annXPx = Math.round(mmToPx(ann.x, EXPORT_DPI))
+            const annYPx = Math.round(mmToPx(ann.y, EXPORT_DPI))
+            const fontSize = Math.max(1, Math.round(mmToPx(ann.fontSize, EXPORT_DPI)))
 
             const fontWeight = ann.bold ? 'bold' : 'normal'
             const bgPadding = Math.max(2, Math.round(fontSize * 0.25))
@@ -172,7 +165,7 @@ async function renderPhotoToDataUrl(
           }
 
           fCanvas.renderAll()
-          const dataUrl = fCanvas.toDataURL({ format, quality, multiplier })
+          const dataUrl = fCanvas.toDataURL({ format, quality, multiplier: 1 })
           fCanvas.dispose()
           resolve(dataUrl)
         } catch (e) {
