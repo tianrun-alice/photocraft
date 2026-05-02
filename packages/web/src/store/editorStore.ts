@@ -9,6 +9,12 @@ import {
   type PhotoTemplate,
   type PresetTemplate,
 } from '@photocraft/shared'
+import {
+  getRotatedTemplateMm,
+  remapAnnotationMmForRotationChange,
+  remapAnnotationMmInDisplayFrame,
+} from '@/utils/unitConvert'
+import { annotationStyleFieldsChanged, photoMatchesPreset } from '@/utils/presetMatch'
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
@@ -26,6 +32,47 @@ function cloneBorder(border: BorderConfig): BorderConfig {
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
+}
+
+function findTemplateByName(name: string): PhotoTemplate {
+  return PHOTO_TEMPLATES.find((t) => t.name === name) ?? PHOTO_TEMPLATES[0]
+}
+
+function getAnchoredPreset(photo: PhotoItem, state: EditorState): PresetTemplate | null {
+  if (!photo.appliedPresetId) return null
+  return state.presets.find((p) => p.id === photo.appliedPresetId) ?? null
+}
+
+/** 若当前套用预设与照片实际不一致，则解除套用并同步侧栏选中 */
+function syncAnchoredPreset(s: EditorState, photo: PhotoItem) {
+  const aid = photo.appliedPresetId
+  if (!aid) return
+  const preset = s.presets.find((p) => p.id === aid)
+  if (!preset || !photoMatchesPreset(photo, preset)) {
+    photo.appliedPresetId = null
+    if (s.selectedPhotoId === photo.id) {
+      s.selectedPresetId = null
+    }
+  }
+}
+
+/** 将预设中的尺寸、旋转、边框、字号应用到照片（含批注坐标与样式） */
+function applyPresetToPhotoDraft(photo: PhotoItem, preset: PresetTemplate) {
+  const { widthMm: w0, heightMm: h0 } = getRotatedTemplateMm(photo.template, photo.templateRotation)
+
+  photo.template = findTemplateByName(preset.templateName)
+  photo.templateRotation = preset.templateRotation
+  photo.border = cloneBorder(preset.border)
+  photo.borderColor = preset.borderColor
+
+  const { widthMm: w1, heightMm: h1 } = getRotatedTemplateMm(photo.template, photo.templateRotation)
+  for (const ann of photo.annotations) {
+    const next = remapAnnotationMmInDisplayFrame(ann.x, ann.y, ann.fontSize, w0, h0, w1, h1)
+    ann.x = next.x
+    ann.y = next.y
+    ann.fontSize = preset.fontSize
+    ann.color = preset.fontColor
+  }
 }
 
 export interface EditorState {
@@ -81,16 +128,15 @@ export const useEditorStore = create<EditorState>()(
     addPhoto: (dataUrl) => {
       set((s) => {
         const template = PHOTO_TEMPLATES.find((t) => t.name === '5寸') ?? PHOTO_TEMPLATES[0]
-        const preset = getSelectedPreset(s as EditorState)
-
-        const border = cloneBorder(preset?.border ?? template.defaults.border)
-        const borderColor = preset?.borderColor ?? template.defaults.borderColor
+        const border = cloneBorder(template.defaults.border)
+        const borderColor = template.defaults.borderColor
 
         const newPhoto: PhotoItem = {
           id: makeId('photo'),
           dataUrl,
           template,
           templateRotation: 0,
+          appliedPresetId: null,
           border,
           borderColor,
           annotations: [],
@@ -104,6 +150,7 @@ export const useEditorStore = create<EditorState>()(
 
         s.photos.push(newPhoto)
         s.selectedPhotoId = newPhoto.id
+        s.selectedPresetId = null
       })
     },
 
@@ -114,6 +161,8 @@ export const useEditorStore = create<EditorState>()(
         s.photos.splice(idx, 1)
         if (s.selectedPhotoId === id) {
           s.selectedPhotoId = s.photos[0]?.id ?? null
+          const next = s.photos[0] ?? null
+          s.selectedPresetId = next?.appliedPresetId ?? null
         }
       })
     },
@@ -121,6 +170,12 @@ export const useEditorStore = create<EditorState>()(
     selectPhoto: (id) => {
       set((s) => {
         s.selectedPhotoId = id
+        if (!id) {
+          s.selectedPresetId = null
+          return
+        }
+        const ph = s.photos.find((p) => p.id === id) ?? null
+        s.selectedPresetId = ph?.appliedPresetId ?? null
       })
     },
 
@@ -128,12 +183,22 @@ export const useEditorStore = create<EditorState>()(
       set((s) => {
         const photo = getSelectedPhoto(s as EditorState)
         if (!photo) return
-        photo.template = template
+        const rot = photo.templateRotation
+        const { widthMm: w0, heightMm: h0 } = getRotatedTemplateMm(photo.template, rot)
 
-        const preset = getSelectedPreset(s as EditorState)
-        if (!preset) {
-          photo.border = cloneBorder(template.defaults.border)
-          photo.borderColor = template.defaults.borderColor
+        photo.template = template
+        const { widthMm: w1, heightMm: h1 } = getRotatedTemplateMm(photo.template, rot)
+
+        for (const ann of photo.annotations) {
+          const next = remapAnnotationMmInDisplayFrame(ann.x, ann.y, ann.fontSize, w0, h0, w1, h1)
+          ann.x = next.x
+          ann.y = next.y
+        }
+
+        syncAnchoredPreset(s as EditorState, photo)
+        if (!photo.appliedPresetId) {
+          photo.border = cloneBorder(photo.template.defaults.border)
+          photo.borderColor = photo.template.defaults.borderColor
         }
       })
     },
@@ -144,7 +209,18 @@ export const useEditorStore = create<EditorState>()(
         if (!photo) return
         const order: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270]
         const idx = order.indexOf(photo.templateRotation)
-        photo.templateRotation = order[(idx + 1) % order.length]
+        const oldRot = photo.templateRotation
+        const newRot = order[(idx + 1) % order.length]
+        const tpl = photo.template
+
+        for (const ann of photo.annotations) {
+          const next = remapAnnotationMmForRotationChange(ann.x, ann.y, ann.fontSize, oldRot, newRot, tpl)
+          ann.x = next.x
+          ann.y = next.y
+        }
+
+        photo.templateRotation = newRot
+        syncAnchoredPreset(s as EditorState, photo)
       })
     },
 
@@ -157,15 +233,14 @@ export const useEditorStore = create<EditorState>()(
     applyPresetToPhoto: () => {
       set((s) => {
         const photo = getSelectedPhoto(s as EditorState)
+        if (!photo) return
         const preset = getSelectedPreset(s as EditorState)
-        if (!photo || !preset) return
-        photo.border = cloneBorder(preset.border)
-        photo.borderColor = preset.borderColor
-
-        for (const ann of photo.annotations) {
-          ann.fontSize = preset.fontSize
-          ann.color = preset.fontColor
+        if (!preset) {
+          photo.appliedPresetId = null
+          return
         }
+        applyPresetToPhotoDraft(photo, preset)
+        photo.appliedPresetId = preset.id
       })
     },
 
@@ -174,17 +249,21 @@ export const useEditorStore = create<EditorState>()(
         const photo = getSelectedPhoto(s as EditorState)
         if (!photo) return
 
+        const sel = getSelectedPreset(s as EditorState)
         const preset: PresetTemplate = {
           id: makeId('preset'),
           name: name.trim() || '未命名预设',
+          templateName: photo.template.name,
+          templateRotation: photo.templateRotation,
           border: cloneBorder(photo.border),
           borderColor: photo.borderColor,
-          fontSize: photo.template.defaults.fontSize,
-          fontColor: photo.template.defaults.fontColor,
+          fontSize: sel?.fontSize ?? photo.annotations[0]?.fontSize ?? photo.template.defaults.fontSize,
+          fontColor: sel?.fontColor ?? photo.annotations[0]?.color ?? photo.template.defaults.fontColor,
         }
 
         s.presets.unshift(preset)
         s.selectedPresetId = preset.id
+        photo.appliedPresetId = preset.id
       })
 
       get().applyPresetToPhoto()
@@ -194,8 +273,12 @@ export const useEditorStore = create<EditorState>()(
       set((s) => {
         const idx = s.presets.findIndex((p) => p.id === id)
         if (idx === -1) return
+        if (s.presets[idx].builtin) return
         s.presets.splice(idx, 1)
         if (s.selectedPresetId === id) s.selectedPresetId = null
+        for (const ph of s.photos) {
+          if (ph.appliedPresetId === id) ph.appliedPresetId = null
+        }
       })
     },
 
@@ -203,10 +286,14 @@ export const useEditorStore = create<EditorState>()(
       set((s) => {
         const photo = getSelectedPhoto(s as EditorState)
         if (!photo) return
-        Object.assign(photo.border, partial)
-        if (partial.enabled) {
-          Object.assign(photo.border.enabled, partial.enabled)
+        const { enabled: enabledPart, ...rest } = partial
+        if (Object.keys(rest).length > 0) {
+          Object.assign(photo.border, rest)
         }
+        if (enabledPart) {
+          Object.assign(photo.border.enabled, enabledPart)
+        }
+        syncAnchoredPreset(s as EditorState, photo)
       })
     },
 
@@ -215,6 +302,7 @@ export const useEditorStore = create<EditorState>()(
         const photo = getSelectedPhoto(s as EditorState)
         if (!photo) return
         photo.borderColor = color
+        syncAnchoredPreset(s as EditorState, photo)
       })
     },
 
@@ -223,23 +311,22 @@ export const useEditorStore = create<EditorState>()(
         const photo = getSelectedPhoto(s as EditorState)
         if (!photo) return
 
-        const preset = getSelectedPreset(s as EditorState)
-        const fontSizeMm = preset?.fontSize ?? photo.template.defaults.fontSize
-        const color = preset?.fontColor ?? photo.template.defaults.fontColor
+        const anchored = getAnchoredPreset(photo, s as EditorState)
+        const fontSizeMm = anchored?.fontSize ?? photo.template.defaults.fontSize
+        const color = anchored?.fontColor ?? photo.template.defaults.fontColor
 
-        const templateWidth = photo.template.mm.width
-        const templateHeight = photo.template.mm.height
+        const { widthMm, heightMm } = getRotatedTemplateMm(photo.template, photo.templateRotation)
 
         const bottomBorderMm = photo.border.enabled.bottom ? photo.border.bottom : 0
         const y =
           bottomBorderMm > 0
-            ? templateHeight - bottomBorderMm / 2 - fontSizeMm / 2
-            : templateHeight - fontSizeMm - 2
+            ? heightMm - bottomBorderMm / 2 - fontSizeMm / 2
+            : heightMm - fontSizeMm - 2
 
         const ann: Annotation = {
           id: `ann-${Date.now()}`,
           text: text ?? '双击编辑',
-          x: templateWidth / 2,
+          x: widthMm / 2,
           y,
           fontSize: fontSizeMm,
           color,
@@ -257,6 +344,9 @@ export const useEditorStore = create<EditorState>()(
         const ann = photo.annotations.find((a) => a.id === id)
         if (!ann) return
         Object.assign(ann, partial)
+        if (annotationStyleFieldsChanged(partial)) {
+          syncAnchoredPreset(s as EditorState, photo)
+        }
       })
     },
 
@@ -308,6 +398,7 @@ export const useEditorStore = create<EditorState>()(
       set((s) => {
         s.photos = []
         s.selectedPhotoId = null
+        s.selectedPresetId = null
       })
     },
   })),

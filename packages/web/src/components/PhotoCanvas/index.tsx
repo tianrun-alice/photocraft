@@ -29,6 +29,10 @@ export function PhotoCanvas() {
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
   const dragPointerIdRef = useRef<number | null>(null)
 
+  const imageDragOriginRef = useRef<{ imgX: number; imgY: number; clientX: number; clientY: number } | null>(null)
+  const pendingImagePosRef = useRef<{ x: number; y: number } | null>(null)
+  const imagePositionRafRef = useRef<number | null>(null)
+
   const containerRef = useRef<HTMLDivElement | null>(null)
   const imgNaturalRef = useRef<{ w: number; h: number } | null>(null)
   const initialFilledRef = useRef(false)
@@ -56,9 +60,16 @@ export function PhotoCanvas() {
     dragPointerIdRef.current = null
   }, [photo?.id])
 
+  useEffect(() => {
+    if (!photo) return
+    const zp = Math.max(0, (photo.imageScale / (baseScale || 1)) * 100)
+    if (!Number.isFinite(zp)) return
+    setZoomInput(zp.toFixed(1).replace(/\.0$/, ''))
+  }, [photo?.id, photo?.imageScale, baseScale])
+
   if (!photo || !dims) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6 text-center text-sm text-gray-500">
+      <div className="pc-panel p-6 text-center text-sm text-emerald-800/75">
         上传图片后开始编辑
       </div>
     )
@@ -80,12 +91,39 @@ export function PhotoCanvas() {
     initialFilledRef.current = true
   }
 
+  function flushImageDragToStore() {
+    if (imagePositionRafRef.current != null) {
+      cancelAnimationFrame(imagePositionRafRef.current)
+      imagePositionRafRef.current = null
+    }
+    const p = pendingImagePosRef.current
+    if (p) {
+      setImagePosition(p.x, p.y)
+      pendingImagePosRef.current = null
+    }
+  }
+
   function startDrag(kind: 'image' | 'ann', e: PointerEvent, id?: string) {
     if (e.button !== 0) return
     if (!containerRef.current) return
     dragPointerIdRef.current = e.pointerId
     containerRef.current.setPointerCapture(e.pointerId)
     lastPointRef.current = { x: e.clientX, y: e.clientY }
+    if (kind === 'image') {
+      imageDragOriginRef.current = { imgX: photo.imageX, imgY: photo.imageY, clientX: e.clientX, clientY: e.clientY }
+      pendingImagePosRef.current = null
+      if (imagePositionRafRef.current != null) {
+        cancelAnimationFrame(imagePositionRafRef.current)
+        imagePositionRafRef.current = null
+      }
+    } else {
+      imageDragOriginRef.current = null
+      if (imagePositionRafRef.current != null) {
+        cancelAnimationFrame(imagePositionRafRef.current)
+        imagePositionRafRef.current = null
+      }
+      pendingImagePosRef.current = null
+    }
     setDragMode(kind === 'image' ? { kind: 'image' } : { kind: 'ann', id: id! })
   }
 
@@ -103,7 +141,21 @@ export function PhotoCanvas() {
     lastPointRef.current = { x: e.clientX, y: e.clientY }
 
     if (dragMode.kind === 'image') {
-      setImagePosition(photo.imageX + dx, photo.imageY + dy)
+      const origin = imageDragOriginRef.current
+      if (!origin) return
+      const nextX = origin.imgX + (e.clientX - origin.clientX)
+      const nextY = origin.imgY + (e.clientY - origin.clientY)
+      pendingImagePosRef.current = { x: nextX, y: nextY }
+      if (imagePositionRafRef.current == null) {
+        imagePositionRafRef.current = requestAnimationFrame(() => {
+          imagePositionRafRef.current = null
+          const pending = pendingImagePosRef.current
+          if (pending) {
+            setImagePosition(pending.x, pending.y)
+            pendingImagePosRef.current = null
+          }
+        })
+      }
       return
     }
 
@@ -117,6 +169,7 @@ export function PhotoCanvas() {
   }
 
   function endDrag(e?: PointerEvent) {
+    flushImageDragToStore()
     if (e && containerRef.current && dragPointerIdRef.current === e.pointerId) {
       try {
         containerRef.current.releasePointerCapture(e.pointerId)
@@ -124,6 +177,7 @@ export function PhotoCanvas() {
         // ignore
       }
     }
+    imageDragOriginRef.current = null
     setDragMode(null)
     lastPointRef.current = null
     dragPointerIdRef.current = null
@@ -141,11 +195,6 @@ export function PhotoCanvas() {
     setImageScale(next)
   }
 
-  useEffect(() => {
-    if (!Number.isFinite(zoomPercent)) return
-    setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
-  }, [zoomPercent])
-
   const imgTransform = `translate(${photo.imageX}px, ${photo.imageY}px) scale(${photo.imageScale}) rotate(${photo.imageRotation}deg) scaleX(${
     photo.imageFlipX ? -1 : 1
   }) scaleY(${photo.imageFlipY ? -1 : 1})`
@@ -155,19 +204,19 @@ export function PhotoCanvas() {
   const bb = photo.border.enabled.bottom ? borderToPx(photo.border.bottom) : 0
   const bl = photo.border.enabled.left ? borderToPx(photo.border.left) : 0
   const br = photo.border.enabled.right ? borderToPx(photo.border.right) : 0
+  /** 与上下边框同向的可排版宽度（内白区域），批注换行宽度与此对齐 */
+  const annotationMaxWidthPx = Math.max(32, dims.previewWidth - bl - br)
 
   return (
-    <div
-      className="bg-white rounded-lg shadow-sm p-3 select-none"
-    >
+    <div className="pc-panel p-3 select-none">
       <div className="flex items-center justify-between mb-2">
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-emerald-900">
           模板：{photo.template.name} · {photo.templateRotation}°
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+            className="pc-btn-secondary"
             onClick={() => setShowOutside((v) => !v)}
           >
             {showOutside ? '隐藏框外' : '显示框外'}
@@ -177,9 +226,12 @@ export function PhotoCanvas() {
 
       <div
         ref={containerRef}
-        className="relative mx-auto"
+        className="relative mx-auto touch-none cursor-grab active:cursor-grabbing"
         style={{ width: dims.containerW, height: dims.containerH }}
-        onPointerDown={onPointerDown}
+        onPointerDown={(e) => {
+          if (e.button === 0) e.preventDefault()
+          onPointerDown(e)
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={(e) => endDrag(e)}
         onPointerCancel={(e) => endDrag(e)}
@@ -189,6 +241,8 @@ export function PhotoCanvas() {
           <img
             src={photo.dataUrl}
             alt=""
+            draggable={false}
+            onDragStart={(ev) => ev.preventDefault()}
             className="absolute left-1/2 top-1/2 opacity-30 pointer-events-none"
             style={{
               width: imgNatural?.w,
@@ -213,8 +267,10 @@ export function PhotoCanvas() {
           <img
             src={photo.dataUrl}
             alt=""
+            draggable={false}
+            onDragStart={(ev) => ev.preventDefault()}
             onLoad={onImageLoad}
-            className="absolute left-1/2 top-1/2"
+            className="absolute left-1/2 top-1/2 select-none"
             style={{
               width: imgNatural?.w,
               height: imgNatural?.h,
@@ -236,7 +292,7 @@ export function PhotoCanvas() {
         </div>
 
         <div
-          className="absolute left-1/2 top-1/2 border-2 border-gray-800 pointer-events-none"
+          className="absolute left-1/2 top-1/2 border-2 border-emerald-800/70 pointer-events-none rounded-[1px]"
           style={{
             width: dims.previewWidth,
             height: dims.previewHeight,
@@ -261,6 +317,7 @@ export function PhotoCanvas() {
               color={ann.color}
               fontWeight={fontWeight}
               background={ann.background}
+              maxWidthPx={annotationMaxWidthPx}
               onPointerDown={(e) => startDrag('ann', e, ann.id)}
             />
           )
@@ -270,14 +327,14 @@ export function PhotoCanvas() {
       <div className="mt-3 flex items-center justify-center gap-2">
         <button
           type="button"
-          className="text-sm px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+          className="pc-btn-secondary text-sm px-3 py-1"
           onClick={() => applyZoomPercent(Math.max(0.01, zoomPercent - 1))}
         >
           -
         </button>
         <div className="flex items-center gap-1">
           <input
-            className="text-sm text-gray-700 w-20 text-center border border-gray-200 rounded px-2 py-1"
+            className="pc-input text-sm text-emerald-900 w-20 text-center py-1"
             inputMode="decimal"
             value={zoomInput}
             onChange={(e) => setZoomInput(e.target.value)}
@@ -295,11 +352,11 @@ export function PhotoCanvas() {
               if (e.key === 'Escape') setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
             }}
           />
-          <div className="text-sm text-gray-700">%</div>
+          <div className="text-sm text-emerald-800/80">%</div>
         </div>
         <button
           type="button"
-          className="text-sm px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
+          className="pc-btn-secondary text-sm px-3 py-1"
           onClick={() => applyZoomPercent(zoomPercent + 1)}
         >
           +
@@ -318,6 +375,7 @@ function AnnotationView(props: {
   color: string
   fontWeight: number
   background: string | null
+  maxWidthPx: number
   onPointerDown: (e: PointerEvent) => void
 }) {
   const updateAnnotation = useEditorStore((s) => s.updateAnnotation)
@@ -333,17 +391,21 @@ function AnnotationView(props: {
 
   return (
     <div
-      className="absolute cursor-move"
+      className="absolute cursor-move text-center"
       style={{
         left: props.x,
         top: props.y,
         transform: 'translate(-50%, 0)',
+        maxWidth: props.maxWidthPx,
         fontSize: props.fontSizePx,
         fontWeight: props.fontWeight,
         color: props.color,
         background: props.background ?? 'transparent',
         padding: props.background ? '2px 4px' : undefined,
         borderRadius: props.background ? 6 : undefined,
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
+        lineHeight: 1.25,
       }}
       onPointerDown={(e) => {
         e.stopPropagation()
@@ -356,7 +418,8 @@ function AnnotationView(props: {
     >
       {editing ? (
         <input
-          className="text-xs border rounded px-1 py-0.5"
+          className="pc-input w-full min-w-0 max-w-full px-1.5 py-1 text-left"
+          style={{ maxWidth: props.maxWidthPx }}
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}

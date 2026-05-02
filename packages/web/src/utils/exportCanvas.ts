@@ -190,25 +190,56 @@ export async function exportCanvas(photo: PhotoItem, format: 'jpeg' | 'png' = 'j
   saveAs(dataUrl, filenameFor(photo, format))
 }
 
+/** 平铺：所有文件在同一层；按尺寸分包：按模板名分子文件夹 */
+export type BatchZipLayout = 'flat' | 'byTemplateFolder'
+
+export function safeZipSegment(name: string): string {
+  const t = name.replace(/[/\\:*?"<>|]/g, '_').trim()
+  return t || 'export'
+}
+
+export async function exportPhotosToZip(
+  photos: PhotoItem[],
+  layout: BatchZipLayout,
+  format: 'jpeg' | 'png' = 'jpeg',
+  quality = 0.95,
+  onProgress?: (done: number, total: number) => void,
+  zipBaseName?: string,
+) {
+  const zip = new JSZip()
+  const total = photos.length
+  const folderIndex = new Map<string, number>()
+
+  for (let i = 0; i < total; i++) {
+    const photo = photos[i]
+    const dataUrl = await renderPhotoToDataUrl(photo, format, quality)
+    const base64 = dataUrl.split(',')[1]
+
+    let pathInZip: string
+    if (layout === 'flat') {
+      pathInZip = `${pad3(i + 1)}-${photo.template.name}-${photo.templateRotation}deg.${format}`
+    } else {
+      const folder = safeZipSegment(photo.template.name)
+      const next = (folderIndex.get(folder) ?? 0) + 1
+      folderIndex.set(folder, next)
+      pathInZip = `${folder}/${pad3(next)}-${photo.templateRotation}deg.${format}`
+    }
+
+    zip.file(pathInZip, base64, { base64: true })
+    onProgress?.(i + 1, total)
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' })
+  const base = zipBaseName ?? `photocraft-export-${Date.now()}`
+  saveAs(blob, base.endsWith('.zip') ? base : `${base}.zip`)
+}
+
 export async function exportAllPhotos(
   photos: PhotoItem[],
   format: 'jpeg' | 'png' = 'jpeg',
   quality = 0.95,
   onProgress?: (done: number, total: number) => void,
 ) {
-  const zip = new JSZip()
-  const total = photos.length
-
-  for (let i = 0; i < total; i++) {
-    const photo = photos[i]
-    const dataUrl = await renderPhotoToDataUrl(photo, format, quality)
-    const base64 = dataUrl.split(',')[1]
-    const filename = `${pad3(i + 1)}-${photo.template.name}-${photo.templateRotation}deg.${format}`
-    zip.file(filename, base64, { base64: true })
-    onProgress?.(i + 1, total)
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' })
-  saveAs(blob, `photocraft-export-${Date.now()}.zip`)
+  await exportPhotosToZip(photos, 'flat', format, quality, onProgress)
 }
 

@@ -19,33 +19,28 @@ export function ControlPanel() {
   const templates = useMemo(() => PHOTO_TEMPLATES, [])
 
   if (!photo) {
-    return <div className="text-sm text-gray-500">请选择或上传一张照片</div>
+    return <div className="text-sm text-emerald-700/85">请选择或上传一张照片</div>
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-700">当前图片</h2>
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-red-600"
-            onClick={() => removePhoto(photo.id)}
-          >
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">当前图片</h2>
+          <button type="button" className="pc-btn-danger" onClick={() => removePhoto(photo.id)}>
             删除
           </button>
         </div>
       </section>
 
+      <p className="rounded-md border border-emerald-200/80 bg-emerald-50/60 px-2.5 py-1.5 text-[11px] leading-snug text-emerald-800/90">
+        修改 尺寸模板、边框设置、文字批注 会解除已套用预设
+      </p>
+
       <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-700">尺寸模板</h2>
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
-            onClick={rotateTemplate}
-            title="旋转模板"
-          >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">尺寸模板</h2>
+          <button type="button" className="pc-btn-secondary shrink-0" onClick={rotateTemplate} title="旋转模板">
             旋转 {photo.templateRotation}°
           </button>
         </div>
@@ -55,8 +50,8 @@ export function ControlPanel() {
               key={t.name}
               type="button"
               className={[
-                'text-xs px-2 py-2 rounded border',
-                t.name === photo.template.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50',
+                'text-xs px-2 py-2 rounded-md border font-medium transition-colors',
+                t.name === photo.template.name ? 'pc-selected' : 'border-emerald-200 bg-white hover:bg-emerald-50/60',
               ].join(' ')}
               onClick={() => setTemplate(t)}
             >
@@ -67,14 +62,14 @@ export function ControlPanel() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium text-gray-700">边框设置</h2>
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-gray-600">颜色</div>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">边框设置</h2>
+        <div className="flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50/40 px-2 py-1.5">
+          <span className="text-xs text-emerald-800/80">颜色</span>
           <input
             type="color"
             value={photo.borderColor}
             onChange={(e) => setBorderColor(e.target.value)}
-            className="h-7 w-10 border rounded"
+            className="h-8 w-10 cursor-pointer rounded border border-emerald-200 bg-white"
           />
         </div>
 
@@ -110,129 +105,110 @@ export function ControlPanel() {
 
       <section className="space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-700">文字批注</h2>
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded bg-gray-900 text-white hover:bg-gray-800"
-            onClick={() => addAnnotation()}
-          >
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">文字批注</h2>
+          <button type="button" className="pc-btn-primary px-3 py-1.5" onClick={() => addAnnotation()}>
             添加文字
           </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           {photo.annotations.map((ann) => (
-            <div key={ann.id} className="border border-gray-200 rounded p-2 space-y-2">
-              <div className="flex items-center gap-2">
+            <div
+              key={ann.id}
+              className="rounded-md border border-emerald-200 bg-emerald-50/35 p-3 space-y-3 shadow-sm"
+            >
+              <div className="flex gap-2 items-center min-w-0">
                 <input
-                  className="flex-1 text-xs border rounded px-2 py-1"
+                  className="pc-input flex-1 min-w-0 py-1.5 px-2"
                   value={ann.text}
                   onChange={(e) => updateAnnotation(ann.id, { text: e.target.value })}
                 />
-                <button
-                  type="button"
-                  className="text-xs px-2 py-1 rounded border border-gray-200 hover:bg-gray-50 text-red-600"
-                  onClick={() => removeAnnotation(ann.id)}
-                >
+                <button type="button" className="pc-btn-danger shrink-0" onClick={() => removeAnnotation(ann.id)}>
                   删除
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 items-center">
-                <label className="text-xs text-gray-600 flex items-center justify-between gap-2">
-                  字号(mm)
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-[11px] font-medium text-emerald-700/85">字号 (mm)</span>
                   <input
                     type="number"
-                    className="w-20 text-xs border rounded px-2 py-1"
+                    className="pc-input w-full py-1.5 px-2"
                     value={ann.fontSize}
                     min={1}
                     step={0.5}
                     onChange={(e) => updateAnnotation(ann.id, { fontSize: Number(e.target.value) })}
                   />
-                </label>
-                <label className="text-xs text-gray-600 flex items-center justify-between gap-2">
-                  颜色
-                  <input
-                    type="color"
-                    className="h-7 w-10 border rounded"
-                    value={ann.color}
-                    onChange={(e) => updateAnnotation(ann.id, { color: e.target.value })}
-                  />
-                </label>
+                </div>
                 <button
                   type="button"
                   className={[
-                    'text-xs px-2 py-1 rounded border',
-                    ann.bold ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200 hover:bg-gray-50',
+                    'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-sm font-bold transition-colors',
+                    ann.bold
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-emerald-200 bg-white text-emerald-900 hover:bg-emerald-50/80',
                   ].join(' ')}
+                  title="加粗"
                   onClick={() => updateAnnotation(ann.id, { bold: !ann.bold })}
                 >
                   B
                 </button>
-                <label className="text-xs text-gray-600 flex items-center justify-between gap-2">
-                  背景
-                  <input
-                    type="color"
-                    className="h-7 w-10 border rounded"
-                    value={ann.background ?? '#ffffff'}
-                    onChange={(e) => updateAnnotation(ann.id, { background: e.target.value })}
-                  />
-                </label>
               </div>
-              <button
-                type="button"
-                className="text-[11px] text-gray-500 underline"
-                onClick={() => updateAnnotation(ann.id, { background: null })}
-              >
-                清除背景
-              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium text-emerald-700/85">颜色</span>
+                <input
+                  type="color"
+                  className="h-9 w-10 shrink-0 cursor-pointer rounded-md border border-emerald-200 bg-white"
+                  value={ann.color}
+                  onChange={(e) => updateAnnotation(ann.id, { color: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium text-emerald-700/85">背景</span>
+                <input
+                  type="color"
+                  className="h-9 w-10 shrink-0 cursor-pointer rounded-md border border-emerald-200 bg-white"
+                  value={ann.background ?? '#ffffff'}
+                  onChange={(e) => updateAnnotation(ann.id, { background: e.target.value })}
+                />
+                <span className="min-w-[4px] flex-1" aria-hidden />
+                <button
+                  type="button"
+                  className="pc-btn-secondary shrink-0 py-1.5 px-2.5 text-[11px]"
+                  onClick={() => updateAnnotation(ann.id, { background: null })}
+                >
+                  清除背景
+                </button>
+              </div>
             </div>
           ))}
 
-          {photo.annotations.length === 0 && <div className="text-xs text-gray-500">暂无批注</div>}
+          {photo.annotations.length === 0 && <div className="text-xs text-emerald-700/85">暂无批注</div>}
         </div>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-medium text-gray-700">图片操作</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">图片操作</h2>
         <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="text-xs px-2 py-2 rounded border border-gray-200 hover:bg-gray-50"
-            onClick={() => rotateImage('left')}
-          >
+          <button type="button" className="pc-btn-secondary py-2" onClick={() => rotateImage('left')}>
             左转
           </button>
-          <button
-            type="button"
-            className="text-xs px-2 py-2 rounded border border-gray-200 hover:bg-gray-50"
-            onClick={() => rotateImage('right')}
-          >
+          <button type="button" className="pc-btn-secondary py-2" onClick={() => rotateImage('right')}>
             右转
           </button>
-          <button
-            type="button"
-            className="text-xs px-2 py-2 rounded border border-gray-200 hover:bg-gray-50"
-            onClick={() => flipImage('x')}
-          >
+          <button type="button" className="pc-btn-secondary py-2" onClick={() => flipImage('x')}>
             水平翻转
           </button>
-          <button
-            type="button"
-            className="text-xs px-2 py-2 rounded border border-gray-200 hover:bg-gray-50"
-            onClick={() => flipImage('y')}
-          >
+          <button type="button" className="pc-btn-secondary py-2" onClick={() => flipImage('y')}>
             垂直翻转
           </button>
         </div>
       </section>
 
-      <section className="space-y-2">
-        <button
-          type="button"
-          className="w-full text-sm px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700"
-          onClick={() => exportCanvas(photo, 'jpeg', 0.95)}
-        >
+      <section>
+        <button type="button" className="pc-btn-primary w-full" onClick={() => exportCanvas(photo, 'jpeg', 0.95)}>
           导出 JPEG（300DPI）
         </button>
       </section>
@@ -248,9 +224,14 @@ function BorderRow(props: {
   onValue: (v: number) => void
 }) {
   return (
-    <div className="grid grid-cols-[40px_1fr_52px] gap-2 items-center">
-      <label className="text-xs text-gray-600 flex items-center gap-1">
-        <input type="checkbox" checked={props.enabled} onChange={(e) => props.onEnabled(e.target.checked)} />
+    <div className="grid grid-cols-[40px_1fr_52px] gap-2 items-center rounded-md border border-emerald-100 bg-white px-1 py-1">
+      <label className="text-xs text-emerald-900/85 flex items-center gap-1.5">
+        <input
+          type="checkbox"
+          className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+          checked={props.enabled}
+          onChange={(e) => props.onEnabled(e.target.checked)}
+        />
         {props.label}
       </label>
       <input
@@ -261,10 +242,11 @@ function BorderRow(props: {
         value={props.value}
         onChange={(e) => props.onValue(Number(e.target.value))}
         disabled={!props.enabled}
+        className="min-w-0 accent-emerald-600 disabled:opacity-40"
       />
       <input
         type="number"
-        className="text-xs border rounded px-2 py-1"
+        className="pc-input w-full px-1.5 py-1 text-center"
         value={props.value}
         min={0}
         step={0.5}
@@ -274,4 +256,3 @@ function BorderRow(props: {
     </div>
   )
 }
-
