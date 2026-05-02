@@ -318,14 +318,16 @@ export const useEditorStore = create<EditorState>()(
         const { widthMm, heightMm } = getRotatedTemplateMm(photo.template, photo.templateRotation)
 
         const bottomBorderMm = photo.border.enabled.bottom ? photo.border.bottom : 0
+        // ann.y 为文字顶部（与画布 originY: top 一致）。底边框带垂直中线 ≈ heightMm - bottomBorderMm/2；
+        // 用略大于半字号的偏移使字形在色带内视觉居中，避免贴底偏下。
         const y =
           bottomBorderMm > 0
-            ? heightMm - bottomBorderMm / 2 - fontSizeMm / 2
-            : heightMm - fontSizeMm - 2
+            ? heightMm - bottomBorderMm / 2 - fontSizeMm * 0.65
+            : heightMm - fontSizeMm * 2.75 - 6
 
         const ann: Annotation = {
           id: `ann-${Date.now()}`,
-          text: text ?? '双击编辑',
+          text: text ?? '在文本框中编辑文字',
           x: widthMm / 2,
           y,
           fontSize: fontSizeMm,
