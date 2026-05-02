@@ -102,8 +102,8 @@ export interface EditorState {
 
   rotateImage: (dir: 'left' | 'right') => void
   flipImage: (axis: 'x' | 'y') => void
-  setImageScale: (scale: number) => void
-  setImagePosition: (x: number, y: number) => void
+  setImageScale: (photoId: string, scale: number) => void
+  setImagePosition: (photoId: string, x: number, y: number) => void
 
   clearAll: () => void
 }
@@ -379,17 +379,17 @@ export const useEditorStore = create<EditorState>()(
       })
     },
 
-    setImageScale: (scale) => {
+    setImageScale: (photoId, scale) => {
       set((s) => {
-        const photo = getSelectedPhoto(s as EditorState)
+        const photo = s.photos.find((ph) => ph.id === photoId)
         if (!photo) return
         photo.imageScale = clamp(scale, 0.01, 5)
       })
     },
 
-    setImagePosition: (x, y) => {
+    setImagePosition: (photoId, x, y) => {
       set((s) => {
-        const photo = getSelectedPhoto(s as EditorState)
+        const photo = s.photos.find((ph) => ph.id === photoId)
         if (!photo) return
         photo.imageX = x
         photo.imageY = y

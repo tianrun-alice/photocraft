@@ -15,6 +15,12 @@ const PREVIEW_DPI = 96
 const MAX_SIZE = 450
 const PADDING = 40
 
+function coverFitScale(naturalW: number, naturalH: number, previewW: number, previewH: number): number {
+  const imgRatio = naturalW / naturalH
+  const templateRatio = previewW / previewH
+  return imgRatio > templateRatio ? previewH / naturalH : previewW / naturalW
+}
+
 export function PhotoCanvas() {
   const photo = useEditorStore((s) => s.photos.find((p) => p.id === s.selectedPhotoId) ?? null)
   const updateAnnotation = useEditorStore((s) => s.updateAnnotation)
@@ -33,10 +39,13 @@ export function PhotoCanvas() {
   const imageDragOriginRef = useRef<{ imgX: number; imgY: number; clientX: number; clientY: number } | null>(null)
   const pendingImagePosRef = useRef<{ x: number; y: number } | null>(null)
   const imagePositionRafRef = useRef<number | null>(null)
+  /** 正在拖拽位移的照片 id，避免 RAF / flush 在切换选中后写到错误照片 */
+  const imageDragPhotoIdRef = useRef<string | null>(null)
+  /** 已做过首次入框缩放+居中的照片，切回时不再 reset 位移与缩放 */
+  const laidOutPhotoIdsRef = useRef<Set<string>>(new Set())
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const imgNaturalRef = useRef<{ w: number; h: number } | null>(null)
-  const initialFilledRef = useRef(false)
 
   const dims = useMemo(() => {
     if (!photo) return null
@@ -51,14 +60,13 @@ export function PhotoCanvas() {
   }, [photo])
 
   useEffect(() => {
-    initialFilledRef.current = false
     imgNaturalRef.current = null
     setImgNatural(null)
     setBaseScale(1)
-    setZoomInput('100')
     setDragMode(null)
     lastPointRef.current = null
     dragPointerIdRef.current = null
+    imageDragPhotoIdRef.current = null
   }, [photo?.id])
 
   useEffect(() => {
@@ -83,16 +91,20 @@ export function PhotoCanvas() {
     const el = e.currentTarget
     imgNaturalRef.current = { w: el.naturalWidth, h: el.naturalHeight }
     setImgNatural({ w: el.naturalWidth, h: el.naturalHeight })
-    if (initialFilledRef.current) return
 
-    const imgRatio = el.naturalWidth / el.naturalHeight
-    const templateRatio = d.previewWidth / d.previewHeight
-    const initialScale = imgRatio > templateRatio ? d.previewHeight / el.naturalHeight : d.previewWidth / el.naturalWidth
-    setImageScale(initialScale)
+    const laidOut = laidOutPhotoIdsRef.current
+    if (laidOut.has(p.id)) {
+      const fit = coverFitScale(el.naturalWidth, el.naturalHeight, d.previewWidth, d.previewHeight)
+      setBaseScale(fit)
+      return
+    }
+
+    laidOut.add(p.id)
+    const initialScale = coverFitScale(el.naturalWidth, el.naturalHeight, d.previewWidth, d.previewHeight)
+    setImageScale(p.id, initialScale)
     setBaseScale(initialScale)
     setZoomInput('100')
-    setImagePosition(0, 0)
-    initialFilledRef.current = true
+    setImagePosition(p.id, 0, 0)
   }
 
   function flushImageDragToStore() {
@@ -100,9 +112,10 @@ export function PhotoCanvas() {
       cancelAnimationFrame(imagePositionRafRef.current)
       imagePositionRafRef.current = null
     }
-    const p = pendingImagePosRef.current
-    if (p) {
-      setImagePosition(p.x, p.y)
+    const pos = pendingImagePosRef.current
+    const dragId = imageDragPhotoIdRef.current
+    if (pos && dragId) {
+      setImagePosition(dragId, pos.x, pos.y)
       pendingImagePosRef.current = null
     }
   }
@@ -114,6 +127,7 @@ export function PhotoCanvas() {
     containerRef.current.setPointerCapture(e.pointerId)
     lastPointRef.current = { x: e.clientX, y: e.clientY }
     if (kind === 'image') {
+      imageDragPhotoIdRef.current = p.id
       imageDragOriginRef.current = { imgX: p.imageX, imgY: p.imageY, clientX: e.clientX, clientY: e.clientY }
       pendingImagePosRef.current = null
       if (imagePositionRafRef.current != null) {
@@ -121,6 +135,7 @@ export function PhotoCanvas() {
         imagePositionRafRef.current = null
       }
     } else {
+      imageDragPhotoIdRef.current = null
       imageDragOriginRef.current = null
       if (imagePositionRafRef.current != null) {
         cancelAnimationFrame(imagePositionRafRef.current)
@@ -154,8 +169,9 @@ export function PhotoCanvas() {
         imagePositionRafRef.current = requestAnimationFrame(() => {
           imagePositionRafRef.current = null
           const pending = pendingImagePosRef.current
-          if (pending) {
-            setImagePosition(pending.x, pending.y)
+          const dragId = imageDragPhotoIdRef.current
+          if (pending && dragId) {
+            setImagePosition(dragId, pending.x, pending.y)
             pendingImagePosRef.current = null
           }
         })
@@ -182,6 +198,7 @@ export function PhotoCanvas() {
       }
     }
     imageDragOriginRef.current = null
+    imageDragPhotoIdRef.current = null
     setDragMode(null)
     lastPointRef.current = null
     dragPointerIdRef.current = null
@@ -190,13 +207,13 @@ export function PhotoCanvas() {
   function onWheel(e: WheelEvent) {
     e.preventDefault()
     const delta = e.deltaY > 0 ? -0.05 : 0.05
-    setImageScale(p.imageScale + delta)
+    setImageScale(p.id, p.imageScale + delta)
   }
 
   const zoomPercent = Math.max(0, (p.imageScale / (baseScale || 1)) * 100)
   const applyZoomPercent = (pct: number) => {
     const next = (baseScale || 1) * (pct / 100)
-    setImageScale(next)
+    setImageScale(p.id, next)
   }
 
   const imgTransform = `translate(${p.imageX}px, ${p.imageY}px) scale(${p.imageScale}) rotate(${p.imageRotation}deg) scaleX(${
