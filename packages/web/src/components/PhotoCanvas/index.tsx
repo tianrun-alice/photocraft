@@ -8,6 +8,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { useEditorStore } from '@/store/editorStore'
+import { annotationMaxWrapWidthPx } from '@/utils/annotationLayout'
 import { getPreviewDimensions, mmToPx, pxToMm } from '@/utils/unitConvert'
 
 const PREVIEW_DPI = 96
@@ -207,9 +208,6 @@ export function PhotoCanvas() {
   const bb = p.border.enabled.bottom ? borderToPx(p.border.bottom) : 0
   const bl = p.border.enabled.left ? borderToPx(p.border.left) : 0
   const br = p.border.enabled.right ? borderToPx(p.border.right) : 0
-  /** 与上下边框同向的可排版宽度（内白区域），批注换行宽度与此对齐 */
-  const annotationMaxWidthPx = Math.max(32, d.previewWidth - bl - br)
-
   return (
     <div className="pc-panel p-3 select-none">
       <div className="flex items-center justify-between mb-2">
@@ -308,6 +306,11 @@ export function PhotoCanvas() {
           const y = PADDING + Math.round(mmToPx(ann.y, PREVIEW_DPI) * d.scale)
           const fontSizePx = Math.max(10, Math.round(mmToPx(ann.fontSize, PREVIEW_DPI) * d.scale))
           const fontWeight = ann.bold ? 700 : 400
+          const maxWidthPx = annotationMaxWrapWidthPx({
+            contentWidthPx: d.previewWidth,
+            borderLeftPx: bl,
+            borderRightPx: br,
+          })
 
           return (
             <AnnotationView
@@ -320,7 +323,7 @@ export function PhotoCanvas() {
               color={ann.color}
               fontWeight={fontWeight}
               background={ann.background}
-              maxWidthPx={annotationMaxWidthPx}
+              maxWidthPx={maxWidthPx}
               onPointerDown={(e) => startDrag('ann', e, ann.id)}
             />
           )
@@ -394,12 +397,13 @@ function AnnotationView(props: {
 
   return (
     <div
-      className="absolute cursor-move text-center"
+      className="absolute cursor-move text-center box-border"
       style={{
         left: props.x,
         top: props.y,
-        transform: 'translate(-50%, 0)',
+        width: props.maxWidthPx,
         maxWidth: props.maxWidthPx,
+        transform: 'translate(-50%, 0)',
         fontSize: props.fontSizePx,
         fontWeight: props.fontWeight,
         color: props.color,

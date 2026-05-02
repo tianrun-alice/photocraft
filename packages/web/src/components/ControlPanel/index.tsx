@@ -153,9 +153,7 @@ export function ControlPanel() {
                 >
                   B
                 </button>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-medium text-emerald-700/85">颜色</span>
                 <input
                   type="color"
@@ -165,8 +163,10 @@ export function ControlPanel() {
                 />
               </div>
 
+              </div>
+
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium text-emerald-700/85">背景</span>
+                <span className="text-[11px] font-medium text-emerald-700/85">背景色</span>
                 <input
                   type="color"
                   className="h-9 w-10 shrink-0 cursor-pointer rounded-md border border-emerald-200 bg-white"

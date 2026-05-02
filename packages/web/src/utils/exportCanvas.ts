@@ -2,6 +2,7 @@ import type { PhotoItem } from '@photocraft/shared'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import { fabric } from 'fabric'
+import { annotationMaxWrapWidthPx } from '@/utils/annotationLayout'
 import { getExportDimensions, getPreviewDimensions, mmToPx } from '@/utils/unitConvert'
 
 const PREVIEW_DPI = 96
@@ -117,7 +118,8 @@ async function renderPhotoToDataUrl(
               }),
             )
 
-          // annotations
+          // annotations（与预览一致：换行宽度不超过左右边框内照片可视宽度）
+          const TextboxCtor = (fabric as unknown as { Textbox: new (text: string, opts?: object) => fabric.Object }).Textbox
           for (const ann of photo.annotations) {
             const annXPx = Math.round(mmToPx(ann.x, EXPORT_DPI))
             const annYPx = Math.round(mmToPx(ann.y, EXPORT_DPI))
@@ -125,43 +127,48 @@ async function renderPhotoToDataUrl(
 
             const fontWeight = ann.bold ? 'bold' : 'normal'
             const bgPadding = Math.max(2, Math.round(fontSize * 0.25))
+            const wrapW = annotationMaxWrapWidthPx({
+              contentWidthPx: exportWidth,
+              borderLeftPx: bl,
+              borderRightPx: br,
+            })
+
+            const tb = new TextboxCtor(ann.text, {
+              width: wrapW,
+              left: annXPx,
+              top: annYPx,
+              originX: 'center',
+              originY: 'top',
+              fontSize,
+              fill: ann.color,
+              fontWeight,
+              textAlign: 'center',
+              splitByGrapheme: true,
+              selectable: false,
+              evented: false,
+            })
+
+            fCanvas.add(tb)
+            const tbox = tb as fabric.Object & { initDimensions?: () => void }
+            tbox.initDimensions?.()
 
             if (ann.background) {
-              const bgText = new fabric.IText(ann.text, {
-                fontSize,
-                fontWeight,
-                visible: false,
-              })
-              const textWidth = bgText.width || ann.text.length * fontSize * 0.6
-              fCanvas.add(
-                new fabric.Rect({
-                  left: annXPx - textWidth / 2 - bgPadding,
-                  top: annYPx - bgPadding,
-                  width: textWidth + bgPadding * 2,
-                  height: fontSize * 1.2 + bgPadding * 2,
-                  fill: ann.background,
-                  opacity: 0.8,
-                  rx: fontSize * 0.08,
-                  ry: fontSize * 0.08,
-                  selectable: false,
-                  evented: false,
-                }),
-              )
-            }
-
-            fCanvas.add(
-              new fabric.IText(ann.text, {
-                left: annXPx,
-                top: annYPx,
-                originX: 'center',
-                originY: 'top',
-                fontSize,
-                fill: ann.color,
-                fontWeight,
+              const bbox = tbox.getBoundingRect(true, true)
+              const bgRect = new fabric.Rect({
+                left: bbox.left - bgPadding,
+                top: bbox.top - bgPadding,
+                width: bbox.width + bgPadding * 2,
+                height: bbox.height + bgPadding * 2,
+                fill: ann.background,
+                opacity: 0.8,
+                rx: fontSize * 0.08,
+                ry: fontSize * 0.08,
                 selectable: false,
                 evented: false,
-              }),
-            )
+              })
+              fCanvas.add(bgRect)
+              bgRect.sendToBack()
+            }
           }
 
           fCanvas.renderAll()
