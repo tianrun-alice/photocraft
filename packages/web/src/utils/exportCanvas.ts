@@ -119,7 +119,7 @@ async function renderPhotoToDataUrl(
             )
 
           // annotations（与预览一致：换行宽度不超过左右边框内照片可视宽度）
-          const TextboxCtor = (fabric as unknown as { Textbox: new (text: string, opts?: object) => fabric.Object }).Textbox
+          const TextboxCtor = (fabric as unknown as { Textbox: new (text: string, opts?: object) => unknown }).Textbox
           for (const ann of photo.annotations) {
             const annXPx = Math.round(mmToPx(ann.x, EXPORT_DPI))
             const annYPx = Math.round(mmToPx(ann.y, EXPORT_DPI))
@@ -148,8 +148,16 @@ async function renderPhotoToDataUrl(
               evented: false,
             })
 
-            fCanvas.add(tb)
-            const tbox = tb as fabric.Object & { initDimensions?: () => void }
+            fCanvas.add(tb as never)
+            const tbox = tb as {
+              initDimensions?: () => void
+              getBoundingRect: (absolute?: boolean, calculate?: boolean) => {
+                left: number
+                top: number
+                width: number
+                height: number
+              }
+            }
             tbox.initDimensions?.()
 
             if (ann.background) {
