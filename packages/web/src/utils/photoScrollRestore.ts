@@ -1,7 +1,8 @@
 /** 列表点选换图时锁定视口滚动位置，在布局提交后写回（绕过滚动锚定、重排后的跳动） */
 let armedY: number | null = null
 let armedX: number | null = null
-let armExpireTimer: ReturnType<typeof window.setTimeout> | null = null
+/** 浏览器 `window.setTimeout` 为 number；与 Node `Timeout` 类型并存时显式用 number 避免 tsc -b 报错 */
+let armExpireTimer: number | null = null
 
 export function armPhotoListScrollRestore() {
   armedX = window.scrollX
