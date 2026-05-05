@@ -42,9 +42,12 @@ export function BatchExportButton() {
 
       {dialogOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-emerald-950/40 p-4 backdrop-blur-[2px]"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-emerald-950/40 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] backdrop-blur-[2px]"
           role="presentation"
           onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closeDialog()
+          }}
+          onPointerDown={(e) => {
             if (e.target === e.currentTarget) closeDialog()
           }}
         >
@@ -52,7 +55,7 @@ export function BatchExportButton() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="batch-export-title"
-            className="pc-panel w-full max-w-sm space-y-4 p-4 shadow-lg shadow-emerald-900/10"
+            className="pc-panel max-h-[min(90dvh,calc(100dvh-2rem))] w-full max-w-sm space-y-4 overflow-y-auto p-4 shadow-lg shadow-emerald-900/10"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div>

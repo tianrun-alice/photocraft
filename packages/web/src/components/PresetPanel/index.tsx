@@ -20,7 +20,7 @@ function presetDetailLines(p: PresetTemplate): { line1: string; line2: string } 
 }
 
 export function PresetPanel() {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())

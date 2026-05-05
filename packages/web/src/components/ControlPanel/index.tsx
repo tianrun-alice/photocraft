@@ -23,7 +23,7 @@ export function ControlPanel() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-emerald-700/85">当前图片</h2>
@@ -44,13 +44,13 @@ export function ControlPanel() {
             旋转 {photo.templateRotation}°
           </button>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {templates.map((t) => (
             <button
               key={t.name}
               type="button"
               className={[
-                'text-xs px-2 py-2 rounded-md border font-medium transition-colors',
+                'rounded-md border px-1.5 py-2 text-[11px] font-medium transition-colors sm:px-2 sm:text-xs',
                 t.name === photo.template.name ? 'pc-selected' : 'border-emerald-200 bg-white hover:bg-emerald-50/60',
               ].join(' ')}
               onClick={() => setTemplate(t)}
@@ -224,7 +224,7 @@ function BorderRow(props: {
   onValue: (v: number) => void
 }) {
   return (
-    <div className="grid grid-cols-[40px_1fr_52px] gap-2 items-center rounded-md border border-emerald-100 bg-white px-1 py-1">
+    <div className="grid grid-cols-[minmax(0,38px)_minmax(0,1fr)_46px] items-center gap-1.5 rounded-md border border-emerald-100 bg-white px-1 py-1 sm:grid-cols-[40px_1fr_52px] sm:gap-2">
       <label className="text-xs text-emerald-900/85 flex items-center gap-1.5">
         <input
           type="checkbox"

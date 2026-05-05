@@ -13,7 +13,8 @@ import { getPreviewDimensions, mmToPx, pxToMm } from '@/utils/unitConvert'
 
 const PREVIEW_DPI = 96
 const MAX_SIZE = 450
-const PADDING = 40
+const DESKTOP_OUTER_PAD = 40
+const MOBILE_OUTER_PAD = 12
 
 function coverFitScale(naturalW: number, naturalH: number, previewW: number, previewH: number): number {
   const imgRatio = naturalW / naturalH
@@ -31,6 +32,7 @@ export function PhotoCanvas() {
   const [imgNatural, setImgNatural] = useState<{ w: number; h: number } | null>(null)
   const [baseScale, setBaseScale] = useState<number>(1)
   const [zoomInput, setZoomInput] = useState<string>('100')
+  const [layoutPad, setLayoutPad] = useState(DESKTOP_OUTER_PAD)
 
   const [dragMode, setDragMode] = useState<null | { kind: 'image' } | { kind: 'ann'; id: string }>(null)
   const lastPointRef = useRef<{ x: number; y: number } | null>(null)
@@ -45,7 +47,27 @@ export function PhotoCanvas() {
   const laidOutPhotoIdsRef = useRef<Set<string>>(new Set())
 
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const fitWrapRef = useRef<HTMLDivElement | null>(null)
+  const [fitWrapW, setFitWrapW] = useState(0)
+  const fitScaleRef = useRef(1)
   const imgNaturalRef = useRef<{ w: number; h: number } | null>(null)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const apply = () => setLayoutPad(mq.matches ? MOBILE_OUTER_PAD : DESKTOP_OUTER_PAD)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    const el = fitWrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setFitWrapW(el.clientWidth))
+    ro.observe(el)
+    setFitWrapW(el.clientWidth)
+    return () => ro.disconnect()
+  }, [photo?.id])
 
   const dims = useMemo(() => {
     if (!photo) return null
@@ -54,10 +76,11 @@ export function PhotoCanvas() {
       previewWidth: width,
       previewHeight: height,
       scale,
-      containerW: width + PADDING * 2,
-      containerH: height + PADDING * 2,
+      layoutPad,
+      containerW: width + layoutPad * 2,
+      containerH: height + layoutPad * 2,
     }
-  }, [photo])
+  }, [photo, layoutPad])
 
   useEffect(() => {
     imgNaturalRef.current = null
@@ -86,6 +109,11 @@ export function PhotoCanvas() {
 
   const p = photo
   const d = dims
+
+  /** 小屏下用 CSS scale 缩放到容器宽，保持与导出一致的 450px 逻辑坐标系 */
+  const fitScale =
+    d.containerW > 0 && fitWrapW > 0 ? Math.min(1, Math.max(0.22, fitWrapW / d.containerW)) : 1
+  fitScaleRef.current = fitScale
 
   function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
     const el = e.currentTarget
@@ -162,8 +190,9 @@ export function PhotoCanvas() {
     if (dragMode.kind === 'image') {
       const origin = imageDragOriginRef.current
       if (!origin) return
-      const nextX = origin.imgX + (e.clientX - origin.clientX)
-      const nextY = origin.imgY + (e.clientY - origin.clientY)
+      const fs = fitScaleRef.current || 1
+      const nextX = origin.imgX + (e.clientX - origin.clientX) / fs
+      const nextY = origin.imgY + (e.clientY - origin.clientY) / fs
       pendingImagePosRef.current = { x: nextX, y: nextY }
       if (imagePositionRafRef.current == null) {
         imagePositionRafRef.current = requestAnimationFrame(() => {
@@ -180,8 +209,9 @@ export function PhotoCanvas() {
     }
 
     if (dragMode.kind === 'ann') {
-      const dMmX = pxToMm(dx / d.scale, PREVIEW_DPI)
-      const dMmY = pxToMm(dy / d.scale, PREVIEW_DPI)
+      const fs = fitScaleRef.current || 1
+      const dMmX = pxToMm(dx / fs / d.scale, PREVIEW_DPI)
+      const dMmY = pxToMm(dy / fs / d.scale, PREVIEW_DPI)
       const ann = p.annotations.find((a) => a.id === dragMode.id)
       if (!ann) return
       updateAnnotation(dragMode.id, { x: ann.x + dMmX, y: ann.y + dMmY })
@@ -226,12 +256,12 @@ export function PhotoCanvas() {
   const bl = p.border.enabled.left ? borderToPx(p.border.left) : 0
   const br = p.border.enabled.right ? borderToPx(p.border.right) : 0
   return (
-    <div className="pc-panel p-3 select-none">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-sm text-emerald-900">
+    <div className="pc-panel touch-manipulation p-2 select-none sm:p-3">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 text-sm text-emerald-900">
           模板：{p.template.name} · {p.templateRotation}°
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             className="pc-btn-secondary"
@@ -242,19 +272,35 @@ export function PhotoCanvas() {
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        className="relative mx-auto touch-none cursor-grab active:cursor-grabbing"
-        style={{ width: d.containerW, height: d.containerH }}
-        onPointerDown={(e) => {
-          if (e.button === 0) e.preventDefault()
-          onPointerDown(e)
-        }}
-        onPointerMove={onPointerMove}
-        onPointerUp={(e) => endDrag(e)}
-        onPointerCancel={(e) => endDrag(e)}
-        onWheel={onWheel}
-      >
+      <div ref={fitWrapRef} className="max-w-full overflow-x-auto">
+        <div
+          className="mx-auto"
+          style={{
+            width: d.containerW * fitScale,
+            height: d.containerH * fitScale,
+          }}
+        >
+          <div
+            className="relative touch-none cursor-grab active:cursor-grabbing"
+            style={{
+              width: d.containerW,
+              height: d.containerH,
+              transform: `scale(${fitScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <div
+              ref={containerRef}
+              className="relative h-full w-full"
+              onPointerDown={(e) => {
+                if (e.button === 0) e.preventDefault()
+                onPointerDown(e)
+              }}
+              onPointerMove={onPointerMove}
+              onPointerUp={(e) => endDrag(e)}
+              onPointerCancel={(e) => endDrag(e)}
+              onWheel={onWheel}
+            >
         {showOutside && (
           <img
             src={p.dataUrl}
@@ -319,8 +365,8 @@ export function PhotoCanvas() {
         />
 
         {p.annotations.map((ann) => {
-          const x = PADDING + Math.round(mmToPx(ann.x, PREVIEW_DPI) * d.scale)
-          const y = PADDING + Math.round(mmToPx(ann.y, PREVIEW_DPI) * d.scale)
+          const x = d.layoutPad + Math.round(mmToPx(ann.x, PREVIEW_DPI) * d.scale)
+          const y = d.layoutPad + Math.round(mmToPx(ann.y, PREVIEW_DPI) * d.scale)
           const fontSizePx = Math.max(10, Math.round(mmToPx(ann.fontSize, PREVIEW_DPI) * d.scale))
           const fontWeight = ann.bold ? 700 : 400
           const maxWidthPx = annotationMaxWrapWidthPx({
@@ -345,9 +391,12 @@ export function PhotoCanvas() {
             />
           )
         })}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           className="pc-btn-secondary text-sm px-3 py-1"
