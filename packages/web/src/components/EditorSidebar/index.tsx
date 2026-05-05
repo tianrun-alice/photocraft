@@ -90,7 +90,10 @@ export function EditorSidebar() {
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
           <h2 className="shrink-0 text-xs font-semibold uppercase tracking-wide text-emerald-700/90">图片列表</h2>
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+            style={{ overflowAnchor: 'none' }}
+          >
             <ImageUploader />
           </div>
         </div>
@@ -109,7 +112,10 @@ export function EditorSidebar() {
         <PresetPanel />
       </div>
       <MobileFold title="图片列表" hint="上传、切换当前编辑的照片" defaultOpen badge={imageBadge}>
-        <div className="max-h-[min(52vh,22rem)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
+        <div
+          className="max-h-[min(52vh,22rem)] min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+          style={{ overflowAnchor: 'none' }}
+        >
           <ImageUploader />
         </div>
         <div className="mt-2 shrink-0">

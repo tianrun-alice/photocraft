@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -9,17 +10,36 @@ import {
 } from 'react'
 import { useEditorStore } from '@/store/editorStore'
 import { annotationMaxWrapWidthPx } from '@/utils/annotationLayout'
+import { consumePhotoListScrollRestore } from '@/utils/photoScrollRestore'
 import { getPreviewDimensions, mmToPx, pxToMm } from '@/utils/unitConvert'
 
 const PREVIEW_DPI = 96
 const MAX_SIZE = 450
 const DESKTOP_OUTER_PAD = 40
 const MOBILE_OUTER_PAD = 12
+/** 吸顶条内缩略预览最大边（逻辑像素），避免占满大半屏 */
+const PIN_THUMB_MAX_W = 192
+const PIN_THUMB_MAX_H = 252
 
 function coverFitScale(naturalW: number, naturalH: number, previewW: number, previewH: number): number {
   const imgRatio = naturalW / naturalH
   const templateRatio = previewW / previewH
   return imgRatio > templateRatio ? previewH / naturalH : previewW / naturalW
+}
+
+/** 与 Editor 侧栏断点一致：小屏用 fixed 吸顶（Edge 等在 flex 子项里 sticky 常失效） */
+function useMatchMedia(query: string) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const apply = () => setMatches(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [query])
+  return matches
 }
 
 export function PhotoCanvas() {
@@ -49,8 +69,19 @@ export function PhotoCanvas() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const fitWrapRef = useRef<HTMLDivElement | null>(null)
   const [fitWrapW, setFitWrapW] = useState(0)
+  /** 切换图时避免 fitWrapW 尚未写入导致 fitScale=1、画布瞬间超高把页面顶上去 */
+  const lastWrapWRef = useRef(0)
   const fitScaleRef = useRef(1)
   const imgNaturalRef = useRef<{ w: number; h: number } | null>(null)
+  const layoutSnapRef = useRef({ fitScale: 1, fitWrapW: 0 })
+
+  const compact = useMatchMedia('(max-width: 1023px)')
+  const pinSentinelRef = useRef<HTMLDivElement | null>(null)
+  const pinBarRef = useRef<HTMLDivElement | null>(null)
+  const [pinFixed, setPinFixed] = useState(false)
+  const [pinSpacerH, setPinSpacerH] = useState(0)
+  /** 吸顶瞬间冻结的 body 缩放，避免吸顶后 fitWrap 变满宽把 fitScale 算回 1 */
+  const [pinnedSnap, setPinnedSnap] = useState<{ fit: number } | null>(null)
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)')
@@ -63,11 +94,14 @@ export function PhotoCanvas() {
   useEffect(() => {
     const el = fitWrapRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setFitWrapW(el.clientWidth))
+    const ro = new ResizeObserver(() => {
+      if (compact && pinFixed) return
+      setFitWrapW(el.clientWidth)
+    })
     ro.observe(el)
-    setFitWrapW(el.clientWidth)
+    if (!(compact && pinFixed)) setFitWrapW(el.clientWidth)
     return () => ro.disconnect()
-  }, [photo?.id])
+  }, [photo?.id, compact, pinFixed])
 
   const dims = useMemo(() => {
     if (!photo) return null
@@ -99,6 +133,69 @@ export function PhotoCanvas() {
     setZoomInput(zp.toFixed(1).replace(/\.0$/, ''))
   }, [photo?.id, photo?.imageScale, baseScale])
 
+  useEffect(() => {
+    setPinFixed(false)
+    setPinnedSnap(null)
+  }, [photo?.id])
+
+  useEffect(() => {
+    if (!compact) {
+      setPinFixed(false)
+      setPinnedSnap(null)
+    }
+  }, [compact])
+
+  useEffect(() => {
+    if (!photo || !compact) return
+    const sentinel = pinSentinelRef.current
+    if (!sentinel) return
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e) return
+        const r = e.boundingClientRect
+        if (!e.isIntersecting && r.bottom < 0) {
+          const bar = pinBarRef.current
+          const h = bar ? Math.max(1, Math.round(bar.getBoundingClientRect().height)) : 1
+          setPinnedSnap({ fit: layoutSnapRef.current.fitScale })
+          setPinSpacerH(h)
+          setPinFixed(true)
+        } else if (r.top >= 0 || e.isIntersecting) {
+          setPinnedSnap(null)
+          setPinFixed(false)
+        }
+      },
+      { root: null, threshold: 0 },
+    )
+    io.observe(sentinel)
+    return () => io.disconnect()
+  }, [photo?.id, photo?.template.name, photo?.templateRotation, compact, layoutPad])
+
+  useEffect(() => {
+    if (!compact || pinFixed) return
+    const id = requestAnimationFrame(() => {
+      const w = fitWrapRef.current?.clientWidth ?? 0
+      if (w > 0) setFitWrapW(w)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [pinFixed, compact, photo?.id])
+
+  useLayoutEffect(() => {
+    if (!photo) return
+    const el = pinBarRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setPinSpacerH(Math.max(1, Math.round(el.getBoundingClientRect().height)))
+    })
+    ro.observe(el)
+    setPinSpacerH(Math.max(1, Math.round(el.getBoundingClientRect().height)))
+    return () => ro.disconnect()
+  }, [photo?.id, pinFixed, showOutside, fitWrapW, layoutPad, photo?.templateRotation])
+
+  /** 须在其它 layout 效果之后，把列表点选时记录的 scroll 写回（含吸顶占位等引起的重排） */
+  useLayoutEffect(() => {
+    consumePhotoListScrollRestore()
+  }, [photo?.id])
+
   if (!photo || !dims) {
     return (
       <div className="pc-panel p-6 text-center text-sm text-emerald-800/75">
@@ -110,10 +207,30 @@ export function PhotoCanvas() {
   const p = photo
   const d = dims
 
-  /** 小屏下用 CSS scale 缩放到容器宽，保持与导出一致的 450px 逻辑坐标系 */
+  /** 小屏下用 CSS scale 缩放到容器宽；预留几像素避免 border/transform 亚像素溢出 */
+  const liveWrapW = fitWrapRef.current?.getBoundingClientRect().width ?? 0
+  const wrapForFit = Math.max(fitWrapW, liveWrapW, lastWrapWRef.current)
+  if (wrapForFit > 0) lastWrapWRef.current = wrapForFit
+
   const fitScale =
-    d.containerW > 0 && fitWrapW > 0 ? Math.min(1, Math.max(0.22, fitWrapW / d.containerW)) : 1
-  fitScaleRef.current = fitScale
+    d.containerW > 0 && wrapForFit > 0
+      ? Math.min(1, Math.max(0.22, Math.max(0, wrapForFit - 3) / d.containerW))
+      : 1
+  /** 吸顶后 fitWrap 会变满宽，勿用此时的 fitScale 覆盖快照 */
+  if (!(compact && pinFixed)) {
+    layoutSnapRef.current = { fitScale, fitWrapW: wrapForFit }
+  }
+
+  /** 吸顶时用冻结的 baseFit，再叠 pinThumbScale 得到左上角缩略图 */
+  const baseFit = compact && pinFixed ? (pinnedSnap?.fit ?? layoutSnapRef.current.fitScale) : fitScale
+  const displayedW = d.containerW * baseFit
+  const displayedH = d.containerH * baseFit
+  const pinThumbScale =
+    compact && pinFixed && displayedW > 0 && displayedH > 0
+      ? Math.min(1, PIN_THUMB_MAX_W / displayedW, PIN_THUMB_MAX_H / displayedH)
+      : 1
+  const visualScale = baseFit * pinThumbScale
+  fitScaleRef.current = visualScale
 
   function onImageLoad(e: SyntheticEvent<HTMLImageElement>) {
     const el = e.currentTarget
@@ -257,38 +374,68 @@ export function PhotoCanvas() {
   const br = p.border.enabled.right ? borderToPx(p.border.right) : 0
   return (
     <div className="pc-panel touch-manipulation p-2 select-none sm:p-3">
-      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 text-sm text-emerald-900">
-          模板：{p.template.name} · {p.templateRotation}°
+      <div
+        ref={pinSentinelRef}
+        className="pointer-events-none h-px w-full shrink-0 bg-transparent opacity-0"
+        aria-hidden
+      />
+      {compact && pinFixed ? <div className="shrink-0" style={{ height: pinSpacerH }} aria-hidden /> : null}
+      <div
+        ref={pinBarRef}
+        className={[
+          '-mx-2 border-b border-emerald-100/80 bg-white/95 px-2 pb-2 pt-0 shadow-sm shadow-emerald-900/[0.06] backdrop-blur-sm sm:-mx-3 sm:px-3',
+          compact && pinFixed
+            ? 'fixed left-0 right-0 top-0 z-30 mx-0 border-b border-emerald-100/80 px-2 pb-2 pt-2 shadow-md shadow-emerald-900/10 sm:px-4'
+            : compact
+              ? 'relative z-10'
+              : '',
+          'lg:static lg:z-auto lg:mx-0 lg:border-0 lg:bg-transparent lg:px-0 lg:pb-0 lg:pt-0 lg:shadow-none lg:backdrop-blur-none',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <div className="mb-2 flex flex-row items-center justify-between gap-2">
+          <div className="min-w-0 truncate text-sm text-emerald-900">
+            模板：{p.template.name} · {p.templateRotation}°
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="pc-btn-secondary"
+              onClick={() => setShowOutside((v) => !v)}
+            >
+              {showOutside ? '隐藏框外' : '显示框外'}
+            </button>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            className="pc-btn-secondary"
-            onClick={() => setShowOutside((v) => !v)}
-          >
-            {showOutside ? '隐藏框外' : '显示框外'}
-          </button>
-        </div>
-      </div>
 
-      <div ref={fitWrapRef} className="max-w-full overflow-x-auto">
-        <div
-          className="mx-auto"
-          style={{
-            width: d.containerW * fitScale,
-            height: d.containerH * fitScale,
-          }}
-        >
+        <div className={compact && pinFixed ? 'flex flex-row items-start gap-2' : ''}>
           <div
-            className="relative touch-none cursor-grab active:cursor-grabbing"
-            style={{
-              width: d.containerW,
-              height: d.containerH,
-              transform: `scale(${fitScale})`,
-              transformOrigin: 'top left',
-            }}
+            ref={fitWrapRef}
+            className={
+              compact && pinFixed
+                ? 'flex shrink-0 justify-start overflow-hidden rounded-md border border-emerald-100/90 bg-emerald-50/25'
+                : 'mx-auto flex w-full min-w-0 max-w-full justify-center overflow-x-hidden'
+            }
+            aria-label={compact && pinFixed ? '裁剪缩略预览' : undefined}
           >
+            <div
+              className="shrink-0"
+              style={{
+                width: d.containerW * visualScale,
+                height: d.containerH * visualScale,
+                maxWidth: compact && pinFixed ? PIN_THUMB_MAX_W : '100%',
+              }}
+            >
+              <div
+                className="relative touch-none cursor-grab active:cursor-grabbing"
+                style={{
+                  width: d.containerW,
+                  height: d.containerH,
+                  transform: `scale(${visualScale})`,
+                  transformOrigin: 'top left',
+                }}
+              >
             <div
               ref={containerRef}
               className="relative h-full w-full"
@@ -356,7 +503,7 @@ export function PhotoCanvas() {
         </div>
 
         <div
-          className="absolute left-1/2 top-1/2 border-2 border-emerald-800/70 pointer-events-none rounded-[1px]"
+          className="absolute left-1/2 top-1/2 box-border border-2 border-emerald-800/70 pointer-events-none rounded-[1px]"
           style={{
             width: d.previewWidth,
             height: d.previewHeight,
@@ -394,45 +541,68 @@ export function PhotoCanvas() {
             </div>
           </div>
         </div>
-      </div>
+          </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          className="pc-btn-secondary text-sm px-3 py-1"
-          onClick={() => applyZoomPercent(Math.max(0.01, zoomPercent - 1))}
-        >
-          -
-        </button>
-        <div className="flex items-center gap-1">
-          <input
-            className="pc-input text-sm text-emerald-900 w-20 text-center py-1"
-            inputMode="decimal"
-            value={zoomInput}
-            onChange={(e) => setZoomInput(e.target.value)}
-            onBlur={() => {
-              const v = Number(zoomInput)
-              if (!Number.isFinite(v) || v <= 0) {
-                setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
-                return
+          <div
+            className={
+              compact && pinFixed
+                ? 'flex min-h-0 min-w-0 flex-1 flex-col justify-center gap-1.5 pl-0.5'
+                : 'mt-3 flex flex-wrap items-center justify-center gap-2'
+            }
+          >
+            {compact && pinFixed ? (
+              <p className="text-[10px] leading-snug text-emerald-700/85">缩略预览 · 滚回上方可大图编辑</p>
+            ) : null}
+            <div
+              className={
+                compact && pinFixed ? 'flex flex-wrap items-center justify-end gap-1.5' : 'contents'
               }
-              applyZoomPercent(v)
-              setZoomInput(v.toString())
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              if (e.key === 'Escape') setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
-            }}
-          />
-          <div className="text-sm text-emerald-800/80">%</div>
+            >
+              <button
+                type="button"
+                className={compact && pinFixed ? 'pc-btn-secondary px-2 py-1 text-xs' : 'pc-btn-secondary text-sm px-3 py-1'}
+                onClick={() => applyZoomPercent(Math.max(0.01, zoomPercent - 1))}
+              >
+                -
+              </button>
+              <div className="flex items-center gap-1">
+                <input
+                  className={
+                    compact && pinFixed
+                      ? 'pc-input w-[4.25rem] py-1 text-center text-xs text-emerald-900'
+                      : 'pc-input text-sm text-emerald-900 w-20 text-center py-1'
+                  }
+                  inputMode="decimal"
+                  value={zoomInput}
+                  onChange={(e) => setZoomInput(e.target.value)}
+                  onBlur={() => {
+                    const v = Number(zoomInput)
+                    if (!Number.isFinite(v) || v <= 0) {
+                      setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
+                      return
+                    }
+                    applyZoomPercent(v)
+                    setZoomInput(v.toString())
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                    if (e.key === 'Escape') setZoomInput(zoomPercent.toFixed(1).replace(/\.0$/, ''))
+                  }}
+                />
+                <div className={compact && pinFixed ? 'text-xs text-emerald-800/80' : 'text-sm text-emerald-800/80'}>
+                  %
+                </div>
+              </div>
+              <button
+                type="button"
+                className={compact && pinFixed ? 'pc-btn-secondary px-2 py-1 text-xs' : 'pc-btn-secondary text-sm px-3 py-1'}
+                onClick={() => applyZoomPercent(zoomPercent + 1)}
+              >
+                +
+              </button>
+            </div>
+          </div>
         </div>
-        <button
-          type="button"
-          className="pc-btn-secondary text-sm px-3 py-1"
-          onClick={() => applyZoomPercent(zoomPercent + 1)}
-        >
-          +
-        </button>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { PHOTO_TEMPLATES, type PhotoItem } from '@photocraft/shared'
 import { useEditorStore } from '@/store/editorStore'
 import { exportPhotosToZip, safeZipSegment } from '@/utils/exportCanvas'
+import { armPhotoListScrollRestore } from '@/utils/photoScrollRestore'
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -76,10 +77,12 @@ export function ImageUploader() {
           'relative aspect-square overflow-hidden rounded-md border transition-shadow',
           p.id === selectedPhotoId ? 'pc-selected' : 'border-emerald-200 hover:border-emerald-300',
         ].join(' ')}
+        onPointerDown={() => armPhotoListScrollRestore()}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => selectPhoto(p.id)}
         title={`${p.template.name} · 点击选中`}
       >
-        <img src={p.dataUrl} alt="" className="h-full w-full object-cover" />
+        <img src={p.dataUrl} alt="" draggable={false} className="h-full w-full object-cover pointer-events-none" />
       </button>
     )
   }
@@ -134,16 +137,16 @@ export function ImageUploader() {
                   {exportingGroupName === g.name ? '导出中…' : '导出本组 ZIP'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">{g.items.map((p) => renderThumb(p))}</div>
+              <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 lg:gap-2">{g.items.map((p) => renderThumb(p))}</div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 lg:gap-2">
           {photos.map((p) => renderThumb(p))}
           <button
             type="button"
-            className="aspect-square rounded-md border-2 border-dashed border-emerald-300 text-2xl font-light leading-none text-emerald-800/80 hover:bg-emerald-50/80"
+            className="aspect-square rounded-md border-2 border-dashed border-emerald-300 text-xl font-light leading-none text-emerald-800/80 hover:bg-emerald-50/80 lg:text-2xl"
             onClick={openPicker}
           >
             +
@@ -160,10 +163,10 @@ export function ImageUploader() {
       </button>
 
       {groupBySize && (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-2 lg:gap-2">
           <button
             type="button"
-            className="aspect-square rounded-md border-2 border-dashed border-emerald-300 text-2xl font-light leading-none text-emerald-800/80 hover:bg-emerald-50/80"
+            className="aspect-square rounded-md border-2 border-dashed border-emerald-300 text-xl font-light leading-none text-emerald-800/80 hover:bg-emerald-50/80 lg:text-2xl"
             onClick={openPicker}
           >
             +

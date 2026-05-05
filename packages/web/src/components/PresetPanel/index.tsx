@@ -104,10 +104,10 @@ export function PresetPanel() {
           selected ? 'pc-selected border-emerald-500' : 'border-emerald-200 bg-white',
         ].join(' ')}
       >
-        <div className="flex gap-1 p-1.5">
+        <div className="flex gap-0.5 p-1 sm:p-1.5">
           <button
             type="button"
-            className="min-w-0 flex-1 rounded px-2 py-1.5 text-left text-xs hover:bg-emerald-50/60"
+            className="min-w-0 flex-1 rounded px-1 py-1 text-left text-[11px] hover:bg-emerald-50/60 sm:px-2 sm:py-1.5 sm:text-xs"
             onClick={() => choose(p.id)}
             title={expanded ? undefined : `${line1} · ${line2}`}
           >
@@ -115,7 +115,7 @@ export function PresetPanel() {
           </button>
           <button
             type="button"
-            className="pc-btn-secondary shrink-0 px-2 py-1 text-[10px]"
+            className="pc-btn-secondary shrink-0 px-1.5 py-0.5 text-[10px] sm:px-2 sm:py-1"
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -127,7 +127,7 @@ export function PresetPanel() {
           {opts.showDelete && (
             <button
               type="button"
-              className="pc-btn-secondary shrink-0 px-2.5 text-emerald-800/70 hover:text-red-600"
+              className="pc-btn-secondary shrink-0 px-1.5 text-[12px] leading-none text-emerald-800/70 hover:text-red-600 sm:px-2.5"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -140,7 +140,7 @@ export function PresetPanel() {
           )}
         </div>
         {expanded && (
-          <div className="space-y-0.5 border-t border-emerald-100 px-3 py-2 text-[11px] leading-snug text-emerald-800/85">
+          <div className="space-y-0.5 border-t border-emerald-100 px-2 py-1.5 text-[10px] leading-snug text-emerald-800/85 sm:px-3 sm:py-2 sm:text-[11px]">
             <div>{line1}</div>
             <div>{line2}</div>
           </div>
@@ -150,8 +150,8 @@ export function PresetPanel() {
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex w-full items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-800/85">
+    <div className="space-y-1.5">
+      <div className="flex w-full items-center justify-between gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-800/85 sm:text-xs">
         <div className="flex min-w-0 items-center gap-1">
           <span className="truncate">预设模板</span>
           <div className="group relative inline-flex shrink-0">
@@ -189,19 +189,19 @@ export function PresetPanel() {
       </div>
 
       {open && (
-        <div className="space-y-2">
-          <div className="space-y-1.5">
-            <button
-              type="button"
-              className={[
-                'w-full rounded-md border px-2.5 py-2 text-left text-xs transition-colors',
-                selectedPresetId === null ? 'pc-selected border-emerald-500' : 'border-emerald-200 bg-white hover:bg-emerald-50/70',
-              ].join(' ')}
-              onClick={() => choose(null)}
-            >
-              <div className="font-medium text-emerald-950">不使用预设</div>
-            </button>
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            className={[
+              'w-full rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors sm:px-2.5 sm:py-2 sm:text-xs',
+              selectedPresetId === null ? 'pc-selected border-emerald-500' : 'border-emerald-200 bg-white hover:bg-emerald-50/70',
+            ].join(' ')}
+            onClick={() => choose(null)}
+          >
+            <div className="font-medium text-emerald-950">不使用预设</div>
+          </button>
 
+          <div className="grid grid-cols-2 gap-1 sm:gap-1.5">
             {builtins.map((p) => presetCard(p, {}))}
             {userPresets.map((p) => presetCard(p, { showDelete: true }))}
           </div>
